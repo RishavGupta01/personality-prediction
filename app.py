@@ -1,66 +1,48 @@
 import streamlit as st
-import numpy as np
-import tensorflow as tf
-from sklearn.preprocessing import LabelEncoder
 import pandas as pd
+import numpy as np
+import joblib
 
-# Set Streamlit page config
-st.set_page_config(
-    page_title="Personality Predictor",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
+# Set page config
+st.set_page_config(page_title="🧠 Personality Predictor", layout="centered")
 
-# Custom CSS for dark theme overrides and responsiveness
-st.markdown("""
-<style>
-body {
-    background-color: #0e1117;
-    color: #fafafa;
-}
-[data-testid="stAppViewContainer"] {
-    background-color: #0e1117;
-}
-h1, h2, h3 {
-    color: #f39c12;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Load model and label encoder
+# Load model and encoders
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model('model.h5')
-    encoder = LabelEncoder()
-    encoder.classes_ = np.load('classes.npy', allow_pickle=True)
-    return model, encoder
+    model = joblib.load('rf_personality_model.pkl')
+    label_classes = np.load('label_classes.npy', allow_pickle=True)
+    feature_columns = joblib.load('feature_columns.pkl')
+    return model, label_classes, feature_columns
 
-model, encoder = load_model()
+model, label_classes, feature_columns = load_model()
 
-# App layout
-st.title("🧠 Personality Prediction")
-st.write("Enter your details to predict your personality type.")
+# Page title
+st.title("🧠 Personality Predictor")
+st.markdown("Fill out the information below to predict your personality type.")
 
-# Input fields
-age = st.slider("Age", 13, 70, 25)
-gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-openness = st.slider("Openness", 0.0, 1.0, 0.5)
-neuroticism = st.slider("Neuroticism", 0.0, 1.0, 0.5)
-conscientiousness = st.slider("Conscientiousness", 0.0, 1.0, 0.5)
-agreeableness = st.slider("Agreeableness", 0.0, 1.0, 0.5)
-extraversion = st.slider("Extraversion", 0.0, 1.0, 0.5)
+# User inputs
+user_input = {}
+user_input['time_spent_alone'] = st.slider("⏱️ Time Spent Alone (hours/day)", 0, 24, 5)
+user_input['stage_fear'] = st.selectbox("😨 Do you have stage fear?", ['Yes', 'No'])
+user_input['social_event_attendance'] = st.selectbox("🎉 Do you attend social events?", ['Yes', 'No'])
+user_input['going_outside'] = st.selectbox("🚶‍♂️ Do you like going outside?", ['Yes', 'No'])
+user_input['drained_after_socializing'] = st.selectbox("💤 Do you feel drained after socializing?", ['Yes', 'No'])
+user_input['friends_circle_size'] = st.slider("👥 Friends Circle Size", 0, 100, 10)
+user_input['post_frequency'] = st.slider("📱 Social Media Post Frequency (posts/week)", 0, 50, 3)
 
-if st.button("Predict Personality"):
-    input_data = pd.DataFrame([[
-        age, gender, openness, neuroticism,
-        conscientiousness, agreeableness, extraversion
-    ]], columns=[
-        "age", "gender", "openness", "neuroticism",
-        "conscientiousness", "agreeableness", "extraversion"
-    ])
+# Predict button
+if st.button("🔍 Predict Personality"):
+    # Convert input to dataframe
+    input_df = pd.DataFrame([user_input])
 
-    input_data["gender"] = encoder.transform(input_data["gender"])
-    prediction = model.predict(input_data)
-    personality_type = np.argmax(prediction)
-    st.success(f"Predicted Personality Type: **{personality_type}**")
+    # One-hot encode the input (same logic as training)
+    input_encoded = pd.get_dummies(input_df)
+    
+    # Reindex to match training columns
+    input_encoded = input_encoded.reindex(columns=feature_columns, fill_value=0)
 
+    # Predict
+    prediction = model.predict(input_encoded)[0]
+    predicted_label = label_classes[prediction]
+
+    st.success(f"🧠 Predicted Personality Type: **{predicted_label}**")
