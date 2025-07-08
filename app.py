@@ -1,92 +1,66 @@
 import streamlit as st
 import numpy as np
-import joblib
-from tensorflow.keras.models import load_model
+import tensorflow as tf
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
 
-# Load saved model and preprocessing objects
-model = load_model('deep_personality_model.keras')
-scaler = joblib.load('scaler.pkl')
-target_encoder = joblib.load('target_encoder.pkl')
-
-# Page config
+# Set Streamlit page config
 st.set_page_config(
-    page_title="Personality Classifier",
-    page_icon="🧠",
+    page_title="Personality Predictor",
     layout="centered",
-    initial_sidebar_state="auto",
-    menu_items={"About": "A personality predictor using deep learning."}
+    initial_sidebar_state="collapsed"
 )
 
-# Custom dark style
+# Custom CSS for dark theme overrides and responsiveness
 st.markdown("""
-    <style>
-        body {
-            background-color: #0E1117;
-            color: white;
-        }
-        .stApp {
-            background-color: #0E1117;
-        }
-        h1, h2, h3, .stButton>button {
-            color: #F3F4F6;
-        }
-        .stTextInput>div>div>input, .stNumberInput>div>input {
-            background-color: #1C1F26;
-            color: white;
-        }
-        .stButton>button {
-            background-color: #2563EB;
-            color: white;
-            border-radius: 8px;
-        }
-        .stButton>button:hover {
-            background-color: #1E40AF;
-        }
-    </style>
+<style>
+body {
+    background-color: #0e1117;
+    color: #fafafa;
+}
+[data-testid="stAppViewContainer"] {
+    background-color: #0e1117;
+}
+h1, h2, h3 {
+    color: #f39c12;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# App title
-st.title("🧠 Personality Prediction App")
-st.subheader("Predict if someone is an Introvert or Extrovert")
+# Load model and label encoder
+@st.cache_resource
+def load_model():
+    model = tf.keras.models.load_model('model.h5')
+    encoder = LabelEncoder()
+    encoder.classes_ = np.load('classes.npy', allow_pickle=True)
+    return model, encoder
 
-# Input fields — make sure these match your features
-feature_names = ['Age', 'Gender', 'Openness', 'Conscientiousness', 'Extraversion', 'Agreeableness']
-inputs = []
+model, encoder = load_model()
 
-with st.form(key="input_form"):
-    col1, col2 = st.columns(2)
-    with col1:
-        inputs.append(st.number_input("Age", 10, 100, value=25))
-        inputs.append(st.selectbox("Gender", options=['Male', 'Female'], index=0))
-        inputs.append(st.slider("Openness", 1, 10, value=5))
-    with col2:
-        inputs.append(st.slider("Conscientiousness", 1, 10, value=5))
-        inputs.append(st.slider("Extraversion", 1, 10, value=5))
-        inputs.append(st.slider("Agreeableness", 1, 10, value=5))
+# App layout
+st.title("🧠 Personality Prediction")
+st.write("Enter your details to predict your personality type.")
 
-    submit = st.form_submit_button("Predict")
+# Input fields
+age = st.slider("Age", 13, 70, 25)
+gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+openness = st.slider("Openness", 0.0, 1.0, 0.5)
+neuroticism = st.slider("Neuroticism", 0.0, 1.0, 0.5)
+conscientiousness = st.slider("Conscientiousness", 0.0, 1.0, 0.5)
+agreeableness = st.slider("Agreeableness", 0.0, 1.0, 0.5)
+extraversion = st.slider("Extraversion", 0.0, 1.0, 0.5)
 
-# Map gender to numeric
-gender_map = {'Male': 0, 'Female': 1}
-if submit:
-    try:
-        # Prepare input
-        input_vals = np.array([
-            inputs[0],                          # Age
-            gender_map[inputs[1]],             # Gender
-            inputs[2], inputs[3], inputs[4], inputs[5]  # Traits
-        ]).reshape(1, -1)
+if st.button("Predict Personality"):
+    input_data = pd.DataFrame([[
+        age, gender, openness, neuroticism,
+        conscientiousness, agreeableness, extraversion
+    ]], columns=[
+        "age", "gender", "openness", "neuroticism",
+        "conscientiousness", "agreeableness", "extraversion"
+    ])
 
-        input_scaled = scaler.transform(input_vals)
-        prediction_probs = model.predict(input_scaled)
-        predicted_class = np.argmax(prediction_probs)
-        predicted_label = target_encoder.inverse_transform([predicted_class])[0]
-        confidence = np.max(prediction_probs)
+    input_data["gender"] = encoder.transform(input_data["gender"])
+    prediction = model.predict(input_data)
+    personality_type = np.argmax(prediction)
+    st.success(f"Predicted Personality Type: **{personality_type}**")
 
-        st.markdown("---")
-        st.markdown(f"### 🧬 Predicted Personality: **{predicted_label}**")
-        st.markdown(f"**🔮 Confidence: {confidence * 100:.2f}%**")
-        st.balloons()
-
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
